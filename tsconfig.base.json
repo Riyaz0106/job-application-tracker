@@ -1,0 +1,24 @@
+{
+  // Shared TypeScript settings inherited by every workspace.
+  // Each workspace's own tsconfig.json extends this and adds
+  // environment-specific options (browser/bundler vs. Node).
+  "compilerOptions": {
+    // --- Strictness (the whole point of using TS) ---
+    "strict": true, // enables strictNullChecks, noImplicitAny, etc.
+    "noUnusedLocals": true, // catch dead variables
+    "noUnusedParameters": true, // catch dead function args
+    "noFallthroughCasesInSwitch": true, // require break/return in switch cases
+    "noUncheckedIndexedAccess": true, // arr[i] / obj[key] are T | undefined — forces null checks
+    "noImplicitOverride": true, // must write `override` when overriding a base method
+    "forceConsistentCasingInFileNames": true, // avoid Linux/Windows casing bugs
+
+    // --- Interop / ergonomics ---
+    "esModuleInterop": true, // clean `import express from "express"` style imports
+    "resolveJsonModule": true, // allow importing .json files
+    "isolatedModules": true, // required by esbuild/tsx/Vite — each file compiles alone
+    "skipLibCheck": true // don't type-check node_modules .d.ts files (much faster builds)
+    // NOTE: verbatimModuleSyntax is intentionally NOT here. It's great for the
+    // bundler-based client but conflicts with the CommonJS server (it forbids
+    // downleveling ESM `import` to `require`). It's set in client/tsconfig.json.
+  }
+}

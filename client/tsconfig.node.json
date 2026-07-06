@@ -1,0 +1,15 @@
+{
+  // Separate config for Vite's own config file, which runs in Node (not the
+  // browser). Keeping it apart means vite.config.ts gets Node types while the
+  // app in src/ gets DOM types — neither leaks into the other.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts"]
+}

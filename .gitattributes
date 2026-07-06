@@ -1,0 +1,4 @@
+# Normalize all text files to LF in the repository.
+# Keeps line endings consistent across Windows/macOS/Linux and
+# stops Prettier's endOfLine:"lf" rule from flagging CRLF checkouts.
+* text=auto eol=lf

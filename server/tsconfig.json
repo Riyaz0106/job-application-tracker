@@ -1,0 +1,18 @@
+{
+  // Node/server TypeScript config. Extends the shared strict base and adds
+  // Node-specific compile options. This one DOES emit (unlike the client),
+  // because `npm run build` compiles src/ to dist/ for `node dist/index.js`.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "CommonJS", // Node's classic module system — no .js import extensions needed
+    "moduleResolution": "Node",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true, // map runtime errors back to .ts lines
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"]
+}

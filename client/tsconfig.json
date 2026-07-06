@@ -1,0 +1,15 @@
+{
+  // App (browser) TypeScript config. Extends the shared strict base.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"], // browser + DOM APIs
+    "module": "ESNext",
+    "moduleResolution": "Bundler", // Vite bundles, so use bundler-style resolution
+    "jsx": "react-jsx", // new JSX transform — no need to import React in every file
+    "noEmit": true, // Vite/esbuild does the actual transpile; tsc is type-check only
+    "verbatimModuleSyntax": true // enforce explicit `import type`; safe under a bundler
+  },
+  "include": ["src"]
+}
