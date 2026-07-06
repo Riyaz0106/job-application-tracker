@@ -4,10 +4,11 @@
   // because `npm run build` compiles src/ to dist/ for `node dist/index.js`.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "CommonJS", // Node's classic module system — no .js import extensions needed
-    "moduleResolution": "Node",
+    "moduleResolution": "Node10",
     "outDir": "./dist",
     "rootDir": "./src",
     "sourceMap": true, // map runtime errors back to .ts lines
