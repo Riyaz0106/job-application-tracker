@@ -1,5 +1,6 @@
 import express, { type Express } from 'express';
 import { healthRouter } from './routes/health';
+import { dbCheckRouter } from './routes/dbCheck';
 
 // Builds and configures the Express app, but does NOT start it listening.
 // Separating construction from startup means later phases can import
@@ -13,6 +14,7 @@ export function createApp(): Express {
 
   // Routes.
   app.use('/health', healthRouter);
+  app.use('/db-check', dbCheckRouter); // TEMPORARY (Phase 2) — removed later.
 
   return app;
 }

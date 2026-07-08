@@ -4,11 +4,14 @@
   // because `npm run build` compiles src/ to dist/ for `node dist/index.js`.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "CommonJS", // Node's classic module system — no .js import extensions needed
-    "moduleResolution": "Node10",
+    // NodeNext = current, non-deprecated Node resolution (replaces the
+    // deprecated "node10", which newer TypeScript flags as an error). Server has
+    // no "type":"module", so files still emit as CommonJS (no .js import
+    // extensions needed). NodeNext also honors package `exports` maps.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "./dist",
     "rootDir": "./src",
     "sourceMap": true, // map runtime errors back to .ts lines

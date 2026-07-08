@@ -1,0 +1,68 @@
+// Prisma schema for the Job Application Tracker.
+// Docs: https://pris.ly/d/prisma-schema
+//
+// Prisma 6 (classic) setup:
+//  - `prisma-client-js` generates the client into node_modules/.prisma/client,
+//    re-exported by `@prisma/client` (import { PrismaClient } from '@prisma/client').
+//  - The datasource url is read from process.env.DATABASE_URL; the Prisma CLI
+//    auto-loads server/.env, and the running server loads it via src/config/env.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  applications Application[]
+  createdAt    DateTime      @default(now())
+}
+
+model Application {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  company        String
+  role           String
+  jobDescription String      @db.Text
+  matchScore     Int?
+  matchGaps      String?     @db.Text
+  cvFileName     String?
+  cvFileUrl      String?
+  coverLetter    String?
+  coverLetterUrl String?
+  status         Status      @default(APPLIED)
+  appliedDate    DateTime    @default(now())
+  interviews     Interview[]
+  salary         String?
+  recruiter      String?
+  notes          String?     @db.Text
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Interview {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id])
+  round         String
+  date          DateTime
+  notes         String?     @db.Text
+}
+
+enum Status {
+  DRAFTING
+  APPLIED
+  PHONE_SCREEN
+  TECHNICAL
+  PANEL
+  OFFER
+  REJECTED
+  ACCEPTED
+}
