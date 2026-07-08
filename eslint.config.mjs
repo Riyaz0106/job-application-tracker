@@ -18,6 +18,21 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
+  // Treat a leading underscore as "intentionally unused", matching tsc's
+  // noUnusedLocals/noUnusedParameters behavior (e.g. an unused `_opts` arg).
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
+
   // Client code runs in the browser and uses React + JSX.
   {
     files: ['client/**/*.{ts,tsx}'],
