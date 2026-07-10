@@ -1,9 +1,11 @@
 import { router } from '../trpc';
+import { authRouter } from './auth';
 import { applicationsRouter } from './applications';
 import { interviewsRouter } from './interviews';
 
 // The root router — everything the API exposes hangs off this.
 export const appRouter = router({
+  auth: authRouter,
   applications: applicationsRouter,
   interviews: interviewsRouter,
 });

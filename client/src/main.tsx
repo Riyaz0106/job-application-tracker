@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
 import App from './App';
 import { trpc } from './trpc';
+import { getToken } from './lib/token';
 import './index.css';
 
 const rootElement = document.getElementById('root');
@@ -18,7 +19,17 @@ const trpcClient = trpc.createClient({
   // Relative URL → the browser hits the Vite dev origin, which proxies /api/* to
   // the Express server (see client/vite.config.ts). httpBatchLink also coalesces
   // calls made in the same tick into a single HTTP request.
-  links: [httpBatchLink({ url: '/api/trpc' })],
+  links: [
+    httpBatchLink({
+      url: '/api/trpc',
+      // Called per request, so the latest token is always attached. When logged
+      // out (no token) we send no Authorization header.
+      headers() {
+        const token = getToken();
+        return token ? { authorization: `Bearer ${token}` } : {};
+      },
+    }),
+  ],
 });
 
 createRoot(rootElement).render(

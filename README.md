@@ -3,12 +3,11 @@
 A full-stack TypeScript application for tracking job applications. This
 repository is a **monorepo** managed with npm workspaces.
 
-> **Status: Phase 3 — type-safe API layer (tRPC).**
-> On top of Phases 1–2, the server exposes an end-to-end type-safe API with
-> tRPC v11: `applications` and `interviews` routers (full CRUD, Zod-validated)
-> backed by Prisma. The React client calls them through generated hooks with
-> types inferred straight from the server — no hand-written API types. Auth, AI,
-> and file uploads under _Planned_ are **not built yet**.
+> **Status: Phase 4 — JWT authentication (multi-user).**
+> On top of Phases 1–3, users can **register / log in**; requests carry a JWT and
+> every applications/interviews procedure is now **`protectedProcedure`** scoped
+> to the logged-in user — you only ever see your own data. Passwords are bcrypt
+> hashed. AI and file uploads under _Planned_ are **not built yet**.
 
 ## Stack
 
@@ -17,9 +16,10 @@ repository is a **monorepo** managed with npm workspaces.
 | Frontend  | React 18, TypeScript, Vite, Tailwind CSS v3             |
 | Backend   | Node.js, Express, TypeScript                            |
 | API       | tRPC v11 + Zod, TanStack Query (React) on the client    |
+| Auth      | JWT (`jsonwebtoken`) + `bcryptjs` password hashing      |
 | Database  | PostgreSQL via Prisma 6 (`@prisma/client`)              |
 | Tooling   | npm workspaces, ESLint 9 (flat config), Prettier, `tsx` |
-| _Planned_ | JWT auth, Anthropic API, file uploads                   |
+| _Planned_ | Anthropic API, file uploads                             |
 | _Planned_ | Docker, GitHub Actions, Railway                         |
 
 ## Repository layout
@@ -29,25 +29,33 @@ repository is a **monorepo** managed with npm workspaces.
 ├── client/              # React + Vite + Tailwind frontend
 │   └── src/
 │       ├── trpc.ts       # tRPC React client (imports AppRouter TYPE from server)
-│       ├── main.tsx      # mounts tRPC + React Query providers
-│       └── App.tsx       # proof-of-life: list + "Add test application"
+│       ├── main.tsx      # providers; attaches the JWT to tRPC request headers
+│       ├── App.tsx       # auth gate: login/register when logged out, else dashboard
+│       ├── lib/token.ts  # JWT storage (memory + localStorage)
+│       └── components/
+│           ├── AuthForm.tsx  # login / register form
+│           └── Dashboard.tsx # applications list + add + logout
 ├── server/              # Express + TypeScript API
 │   ├── prisma/
 │   │   ├── schema.prisma # models: User, Application, Interview + Status enum
 │   │   └── migrations/   # versioned SQL migrations (created by you — see below)
-│   ├── .env.example      # copy to server/.env (DATABASE_URL, PORT, NODE_ENV)
+│   ├── .env.example      # copy to server/.env (DATABASE_URL, JWT_SECRET, PORT, NODE_ENV)
 │   └── src/
 │       ├── index.ts      # entry: starts the HTTP server
 │       ├── app.ts        # Express app; mounts tRPC at /api/trpc
 │       ├── config/env.ts # loads server/.env, centralized config
 │       ├── db/prisma.ts   # singleton Prisma Client (@prisma/client)
+│       ├── auth/
+│       │   ├── password.ts # bcryptjs hash / verify
+│       │   └── jwt.ts       # sign / verify JWT (7-day expiry)
 │       ├── trpc/
-│       │   ├── trpc.ts     # initTRPC: router + publicProcedure
-│       │   ├── context.ts  # per-request context (provides ctx.prisma)
+│       │   ├── trpc.ts     # initTRPC: router, publicProcedure, protectedProcedure
+│       │   ├── context.ts  # per-request context: ctx.prisma + ctx.user (from JWT)
 │       │   └── routers/
 │       │       ├── _app.ts        # root appRouter + exported AppRouter type
-│       │       ├── applications.ts # CRUD (list/byId/create/update/delete)
-│       │       └── interviews.ts   # CRUD by application
+│       │       ├── auth.ts         # register / login / me
+│       │       ├── applications.ts # CRUD, scoped to ctx.user.id
+│       │       └── interviews.ts   # CRUD, scoped through the parent application
 │       └── routes/
 │           ├── health.ts  # GET /health
 │           └── dbCheck.ts # GET /db-check  (TEMPORARY, Phase 2)
@@ -98,6 +106,13 @@ DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/job_tracker?schema=publi
 - `USER` / `PASSWORD` — your local Postgres role and its password
 - `localhost:5432` — the default Postgres host/port
 - `job_tracker` — the empty database you created
+
+Also set **`JWT_SECRET`** (used to sign auth tokens — see Phase 4 below) to a long
+random string:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
 
 **2. Create and apply the first migration** (run from the `server/` workspace):
 
@@ -183,21 +198,52 @@ Prisma models  ->  tRPC routers (server)  ->  export type AppRouter
 tRPC is mounted at **`/api/trpc`**, reusing the existing Vite `/api` proxy — the
 browser calls a same-origin URL and Vite forwards it to the server.
 
-> **No auth yet:** `applications.create` needs a `userId`, so until Phase 4 it
-> attaches every application to an auto-provisioned `dev@local.test` user. Also,
-> `DateTime` fields currently serialize as **ISO strings** over the wire (no data
-> transformer yet); a `superjson` transformer will be added when the UI renders
-> dates.
+> **Note:** `DateTime` fields currently serialize as **ISO strings** over the wire
+> (no data transformer yet); a `superjson` transformer will be added when the UI
+> renders dates. As of Phase 4 the `applications`/`interviews` procedures require
+> authentication (below) and are scoped to the logged-in user.
 
-### Verify Phase 3
+## Authentication (Phase 4)
 
-1. `npm run dev` (starts client + server together).
-2. Open http://localhost:5173 — you should see **"No applications yet."**
-3. Click **"Add test application"** — a row (`Test Co — Test Role [APPLIED]`)
-   appears immediately, no page reload.
-4. Confirm it persisted: in **pgAdmin** open `job_tracker` → `Application` (or run
-   `npm run db:studio --workspace=server`). You'll also see one `dev@local.test`
-   row in `User`.
+Multi-user auth with JWTs. Passwords are hashed with **bcryptjs** — never stored in
+plaintext, never returned to the client.
+
+**Flow**
+
+1. `auth.register` / `auth.login` verify credentials and return a **signed JWT**
+   (7-day expiry) plus `{ id, email }`.
+2. The client stores the token (in memory + `localStorage`) and attaches it to every
+   tRPC request as an `Authorization: Bearer <token>` header.
+3. The tRPC **context** reads that header, verifies the token, looks the user up, and
+   sets `ctx.user` (or `null`).
+4. **`protectedProcedure`** throws `UNAUTHORIZED` when `ctx.user` is null and narrows
+   the type so `ctx.user` is non-null downstream. All `applications` and `interviews`
+   procedures are protected and filter by `ctx.user.id`, so users only ever see and
+   edit **their own** data.
+
+**Setup:** make sure `JWT_SECRET` is set in `server/.env` (see Database setup above).
+
+> **Security notes (honest trade-offs):**
+>
+> - **Token in `localStorage`** is readable by any script on the page, so an XSS bug
+>   could steal it. An httpOnly cookie is more secure but needs CSRF handling —
+>   deferred.
+> - **7-day expiry** because there's no refresh-token flow yet; production would pair
+>   a short-lived access token with a refresh token.
+> - Login returns a **generic** "invalid email or password" so attackers can't probe
+>   which emails are registered.
+
+### Verify Phase 4
+
+1. `npm run dev`, open http://localhost:5173 — you should see the **login / register**
+   form.
+2. **Register** a user (email + password ≥ 8 chars). You land on the dashboard with an
+   empty list; click **"Add test application"** — it appears.
+3. In **pgAdmin**, confirm the new `Application.userId` matches your new `User` row
+   (not `dev@local.test`).
+4. Click **Log out** → back to the form. **Register a different** user.
+5. The second user's list is **empty** — you do **not** see the first user's
+   application. In pgAdmin, each `Application.userId` points to its own owner.
 
 ## Other scripts (run from the root)
 
