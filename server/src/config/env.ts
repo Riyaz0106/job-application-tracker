@@ -15,4 +15,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: process.env.DATABASE_URL,
+  // Secret used to sign/verify JWTs. May be undefined here; the auth layer
+  // (src/auth/jwt.ts) validates its presence before signing/verifying.
+  jwtSecret: process.env.JWT_SECRET,
 } as const;
