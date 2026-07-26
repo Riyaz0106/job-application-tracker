@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
+import superjson from 'superjson';
 import App from './App';
 import { trpc } from './trpc';
 import { getToken } from './lib/token';
@@ -22,6 +23,9 @@ const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: '/api/trpc',
+      // Must match the server's transformer (server/src/trpc/trpc.ts). tRPC v11
+      // enforces this at the type level — omit it and the client fails to compile.
+      transformer: superjson,
       // Called per request, so the latest token is always attached. When logged
       // out (no token) we send no Authorization header.
       headers() {

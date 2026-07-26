@@ -1,5 +1,132 @@
-/* Tailwind's three layers. `base` = resets/defaults, `components` = reusable
-   component classes, `utilities` = the atomic utility classes you use in JSX. */
+/* ===========================================================================
+   DESIGN TOKENS — single source of truth for the whole UI.
+   Change values HERE, never in components. Components reference tokens only,
+   via the semantic Tailwind classes wired up in tailwind.config.js:
+     colors   -> bg-background / bg-surface / bg-surface-2 / border-line /
+                 text-content / text-muted / text-signal / text-signal-ink /
+                 text-status-<status> (+ /alpha modifiers, e.g. bg-signal/10)
+     radii    -> rounded-card / rounded-control / rounded-pill
+     spacing  -> p-md / gap-lg / … (2xs xs sm md lg xl 2xl)
+     motion   -> duration-fast|base|slow / ease-out|standard
+     fonts    -> font-sans (IBM Plex Sans) / font-mono (IBM Plex Mono)
+
+   Colors are stored as space-separated RGB channels so Tailwind can apply
+   opacity (rgb(var(--x) / <alpha-value>)). Names are ROLE-based (background,
+   surface, border, content, muted) — not appearance-based — so a second theme
+   is a values-only change: add another `:root[data-theme='…']` block below and
+   nothing in the components changes. The accent stays named `signal`.
+   `--surface-alpha` and `--bg-image` are central knobs left for later; the
+   default console look is flat (no image) and opaque.
+
+   TOKEN INDEX
+     color/role : --color-background --color-surface --color-surface-2
+                  --color-border --color-text-primary --color-text-muted
+     color/accent: --color-signal --color-signal-ink
+     color/status: --color-status-drafting --color-status-applied
+                  --color-status-phone-screen --color-status-technical
+                  --color-status-panel --color-status-offer
+                  --color-status-accepted --color-status-rejected
+     surface    : --surface-alpha --bg-image
+     radius     : --radius-card --radius-control --radius-pill
+     space      : --space-2xs …-2xl
+     motion     : --duration-fast|base|slow  --ease-out --ease-standard
+   =========================================================================== */
+
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root[data-theme='dark'] {
+  /* role-based (theme-flippable) */
+  --color-background: 13 19 31; /* #0D131F ink */
+  --color-surface: 21 29 44; /* #151D2C panel */
+  --color-surface-2: 27 37 54; /* #1B2536 raised (cards, menus) */
+  --color-border: 35 47 66; /* #232F42 line */
+  --color-text-primary: 231 236 243; /* #E7ECF3 */
+  --color-text-muted: 133 147 168; /* #8593A8 */
+
+  /* accent */
+  --color-signal: 242 178 62; /* #F2B23E */
+  --color-signal-ink: 26 18 6; /* #1A1206 text on signal fills */
+
+  /* functional status ramp (data encoding, not decoration) */
+  --color-status-drafting: 100 116 139; /* #64748B */
+  --color-status-applied: 91 139 208; /* #5B8BD0 */
+  --color-status-phone-screen: 61 169 184; /* #3DA9B8 */
+  --color-status-technical: 124 134 232; /* #7C86E8 */
+  --color-status-panel: 168 116 212; /* #A874D4 */
+  --color-status-offer: 242 178 62; /* #F2B23E */
+  --color-status-accepted: 79 169 123; /* #4FA97B */
+  --color-status-rejected: 198 99 107; /* #C6636B */
+
+  /* central surface knobs (defaults keep the flat console look) */
+  --surface-alpha: 1;
+  --bg-image: none;
+
+  /* radii */
+  --radius-card: 0.625rem; /* 10px */
+  --radius-control: 0.5rem; /* 8px */
+  --radius-pill: 9999px;
+
+  /* spacing scale */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* motion */
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: rgb(var(--color-background));
+    background-image: var(--bg-image);
+    color: rgb(var(--color-text-primary));
+    font-family:
+      'IBM Plex Sans',
+      system-ui,
+      -apple-system,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Visible keyboard focus everywhere, quiet for mouse users. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-signal));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+/* Motion accessibility (hard requirement): degrade to instant, never break. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

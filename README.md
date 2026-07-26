@@ -3,24 +3,27 @@
 A full-stack TypeScript application for tracking job applications. This
 repository is a **monorepo** managed with npm workspaces.
 
-> **Status: Phase 4 — JWT authentication (multi-user).**
-> On top of Phases 1–3, users can **register / log in**; requests carry a JWT and
-> every applications/interviews procedure is now **`protectedProcedure`** scoped
-> to the logged-in user — you only ever see your own data. Passwords are bcrypt
-> hashed. AI and file uploads under _Planned_ are **not built yet**.
+> **Status: Phase 5 — the real UI.**
+> The placeholder screens are replaced by **PIPELINE**: a dark ops-console with a
+> Kanban **status board**, a signature pipeline-funnel readout, create/edit forms,
+> a detail slide-over with interview management, and polished auth — all on a
+> token-driven design system (Tailwind reading CSS custom properties). Dates now
+> round-trip as real `Date`s (superjson). AI and file uploads under _Planned_ are
+> **not built yet**.
 
 ## Stack
 
-| Area      | Technology                                              |
-| --------- | ------------------------------------------------------- |
-| Frontend  | React 18, TypeScript, Vite, Tailwind CSS v3             |
-| Backend   | Node.js, Express, TypeScript                            |
-| API       | tRPC v11 + Zod, TanStack Query (React) on the client    |
-| Auth      | JWT (`jsonwebtoken`) + `bcryptjs` password hashing      |
-| Database  | PostgreSQL via Prisma 6 (`@prisma/client`)              |
-| Tooling   | npm workspaces, ESLint 9 (flat config), Prettier, `tsx` |
-| _Planned_ | Anthropic API, file uploads                             |
-| _Planned_ | Docker, GitHub Actions, Railway                         |
+| Area      | Technology                                               |
+| --------- | -------------------------------------------------------- |
+| Frontend  | React 18, TypeScript, Vite, Tailwind CSS v3              |
+| UI        | Design tokens (CSS vars), IBM Plex fonts, Framer Motion  |
+| Backend   | Node.js, Express, TypeScript                             |
+| API       | tRPC v11 + Zod + superjson, TanStack Query on the client |
+| Auth      | JWT (`jsonwebtoken`) + `bcryptjs` password hashing       |
+| Database  | PostgreSQL via Prisma 6 (`@prisma/client`)               |
+| Tooling   | npm workspaces, ESLint 9 (flat config), Prettier, `tsx`  |
+| _Planned_ | Anthropic API, file uploads                              |
+| _Planned_ | Docker, GitHub Actions, Railway                          |
 
 ## Repository layout
 
@@ -28,13 +31,16 @@ repository is a **monorepo** managed with npm workspaces.
 .
 ├── client/              # React + Vite + Tailwind frontend
 │   └── src/
-│       ├── trpc.ts       # tRPC React client (imports AppRouter TYPE from server)
-│       ├── main.tsx      # providers; attaches the JWT to tRPC request headers
-│       ├── App.tsx       # auth gate: login/register when logged out, else dashboard
-│       ├── lib/token.ts  # JWT storage (memory + localStorage)
+│       ├── index.css     # DESIGN TOKENS (CSS vars) + fonts + base — single source
+│       ├── trpc.ts       # tRPC React client + inferred RouterOutputs/Inputs types
+│       ├── main.tsx      # providers; superjson + JWT header on the tRPC link
+│       ├── App.tsx       # auth gate: auth screen when logged out, else the board
+│       ├── lib/          # status metadata, date format, motion tokens, token store
 │       └── components/
-│           ├── AuthForm.tsx  # login / register form
-│           └── Dashboard.tsx # applications list + add + logout
+│           ├── AuthForm.tsx      # polished login / register
+│           ├── ui/               # Button, fields, Modal, feedback (tokens only)
+│           ├── board/            # Board, FunnelBar (signature), Column, Card
+│           └── application/      # ApplicationForm, ApplicationDetail, InterviewSection
 ├── server/              # Express + TypeScript API
 │   ├── prisma/
 │   │   ├── schema.prisma # models: User, Application, Interview + Status enum
@@ -244,6 +250,46 @@ plaintext, never returned to the client.
 4. Click **Log out** → back to the form. **Register a different** user.
 5. The second user's list is **empty** — you do **not** see the first user's
    application. In pgAdmin, each `Application.userId` points to its own owner.
+
+## UI — PIPELINE (Phase 5)
+
+A dark operations console for one engineer's job search.
+
+**Design tokens are the single source of truth.** All colours, radii, spacing,
+and motion values are CSS custom properties in `client/src/index.css` (documented
+in a block at the top), scoped under `:root[data-theme='dark']` with **role-based**
+names (`--color-background`, `--color-surface`, `--color-signal`, …). `tailwind.config.js`
+maps semantic classes (`bg-surface`, `text-signal`, `rounded-card`, `gap-md`,
+`duration-fast`) onto those vars, so **components never hardcode a hex/px/ms** and a
+second theme would be a values-only change (no theme toggle is built yet).
+
+**The board.** One column per `Status`; the signature **pipeline funnel** at the top
+summarises the whole search (counts derived client-side from `applications.list` — no
+extra endpoint). Cards show company, role, applied date, and a match-score ring.
+
+**Moving a card** uses a native status `<select>` on the card (keyboard/screen-reader
+accessible, touch-native, 44px targets) — not drag-and-drop. The change is
+**optimistic** (the card moves instantly, rolls back on error) and **Framer Motion**
+animates the card _travelling_ to its new column (`layout` + `layoutId`). Framer Motion
+is used **only** for the card travel and modal enter/leave; all other motion
+(hover/focus, skeletons, buttons) is plain CSS. Everything respects
+`prefers-reduced-motion` (animations degrade to instant).
+
+**Everything else:** create/edit form with inline validation, a right slide-over detail
+view with interview add/edit/delete and delete-with-confirmation, loading skeletons, and
+inline error messages.
+
+### Verify Phase 5
+
+1. `npm run dev`, open http://localhost:5173 — the **PIPELINE** auth screen.
+2. Register/log in → the **board**. Click **+ New**, fill the form (try submitting empty
+   to see inline errors), create an application — it appears in its column.
+3. On a card, change the **status dropdown** — the card **animates to the new column**
+   and persists (refresh to confirm).
+4. Click a card → the **detail slide-over**; add an **interview round**; **Edit** or
+   **Delete** (with confirmation).
+5. Narrow the window to phone width — columns scroll horizontally; tab through with the
+   keyboard to see focus rings. Enable OS "reduce motion" — transitions become instant.
 
 ## Other scripts (run from the root)
 

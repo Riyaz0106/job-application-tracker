@@ -1,18 +1,21 @@
 import { trpc } from './trpc';
+import { clearToken } from './lib/token';
 import { AuthForm } from './components/AuthForm';
-import { Dashboard } from './components/Dashboard';
+import { Board } from './components/board/Board';
 
-// Auth gate. `auth.me` is the single source of truth: it returns the user
-// (derived from the verified JWT) or null. Logged out -> login/register form;
-// logged in -> the applications dashboard.
+// Auth gate. `auth.me` is the source of truth: logged out -> auth screen,
+// logged in -> the board.
 export default function App() {
+  const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery();
 
   if (me.isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-900 text-slate-400">
-        Loading…
-      </main>
+      <div className="flex min-h-dvh items-center justify-center">
+        <span className="animate-pulse font-mono text-sm uppercase tracking-widest text-muted">
+          Loading…
+        </span>
+      </div>
     );
   }
 
@@ -20,5 +23,11 @@ export default function App() {
     return <AuthForm />;
   }
 
-  return <Dashboard email={me.data.email} />;
+  const logout = () => {
+    clearToken();
+    utils.auth.me.setData(undefined, null);
+    utils.applications.list.reset();
+  };
+
+  return <Board email={me.data.email} onLogout={logout} />;
 }

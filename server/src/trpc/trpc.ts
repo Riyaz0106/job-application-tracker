@@ -1,9 +1,15 @@
 import { initTRPC, TRPCError } from '@trpc/server';
+import superjson from 'superjson';
 import type { Context } from './context';
 
 // Single tRPC initialization for the whole app. `.context<Context>()` binds the
 // context type, so every procedure gets a fully-typed `ctx` (ctx.prisma, ctx.user).
-const t = initTRPC.context<Context>().create();
+//
+// superjson transformer: plain JSON turns Date into an ISO string, losing the
+// type. superjson serializes richer types (Date, Map, Set, BigInt, undefined)
+// with side-band metadata so the client rebuilds real `Date` objects. The
+// client link MUST use the same transformer (see client/src/main.tsx).
+const t = initTRPC.context<Context>().create({ transformer: superjson });
 
 export const router = t.router;
 
