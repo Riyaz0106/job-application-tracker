@@ -32,6 +32,25 @@ export const STATUS_LABEL: Record<Status, string> = {
 // "Active" = still in flight (not a terminal outcome). Used by the funnel.
 export const TERMINAL_STATUSES: readonly Status[] = ['REJECTED', 'ACCEPTED'];
 
+// Derives the DEFAULT status for a new application from field completeness:
+// everything that identifies a submitted application is present -> APPLIED,
+// otherwise it's still a draft. Deliberately ignores salary / recruiter / notes
+// / matchScore — those are enrichment, not evidence that you applied.
+// This is only ever a default: an explicit choice in the form overrides it.
+export function deriveDefaultStatus(fields: {
+  company: string;
+  role: string;
+  jobDescription: string;
+  appliedDate: string;
+}): Status {
+  const complete =
+    fields.company.trim() !== '' &&
+    fields.role.trim() !== '' &&
+    fields.jobDescription.trim() !== '' &&
+    fields.appliedDate.trim() !== '';
+  return complete ? 'APPLIED' : 'DRAFTING';
+}
+
 // Data-driven colors resolve to the status tokens at runtime. Returning a
 // token reference (not a hex) keeps colors centralized in index.css, and
 // sidesteps Tailwind's static class scanner for these 8 dynamic values.

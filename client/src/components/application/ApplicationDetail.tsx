@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { ErrorNote, MatchRing, Skeleton, StatusBadge } from '../ui/feedback';
 import { InterviewSection } from './InterviewSection';
 import { formatDate } from '../../lib/format';
+import { useToast } from '../ui/toastContext';
 
 // Right slide-over showing everything about one application + its interviews.
 // The byId query is gated on `id` (hooks stay unconditional).
@@ -18,6 +19,7 @@ export function ApplicationDetail({
   onEdit: (app: Application) => void;
 }) {
   const utils = trpc.useUtils();
+  const toast = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const query = trpc.applications.byId.useQuery(
@@ -25,10 +27,17 @@ export function ApplicationDetail({
     { enabled: id !== null },
   );
   const del = trpc.applications.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: (deleted) => {
       void utils.applications.list.invalidate();
       setConfirmOpen(false);
       onClose();
+      toast.success(`Deleted ${deleted.company}`);
+    },
+    onError: () => {
+      setConfirmOpen(false);
+      toast.error(
+        `Couldn’t delete ${query.data?.company ?? 'that application'} — try again.`,
+      );
     },
   });
   const app = query.data;

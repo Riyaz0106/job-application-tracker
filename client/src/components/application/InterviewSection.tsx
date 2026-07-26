@@ -4,11 +4,13 @@ import { Button } from '../ui/Button';
 import { ErrorNote, Skeleton } from '../ui/feedback';
 import { Field, TextArea, TextInput } from '../ui/fields';
 import { formatDate, toDateInputValue } from '../../lib/format';
+import { useToast } from '../ui/toastContext';
 
 // Add/edit interview rounds for an application. Uses its own list query so CRUD
 // invalidation is local. Round + date are required; notes optional.
 export function InterviewSection({ applicationId }: { applicationId: string }) {
   const utils = trpc.useUtils();
+  const toast = useToast();
   const interviews = trpc.interviews.listByApplication.useQuery({
     applicationId,
   });
@@ -30,7 +32,13 @@ export function InterviewSection({ applicationId }: { applicationId: string }) {
       setEditingId(null);
     },
   });
-  const remove = trpc.interviews.delete.useMutation({ onSuccess: refetch });
+  const remove = trpc.interviews.delete.useMutation({
+    onSuccess: async (deleted) => {
+      await refetch();
+      toast.success(`Deleted ${deleted.round}`);
+    },
+    onError: () => toast.error('Couldn’t delete that round — try again.'),
+  });
 
   return (
     <section aria-label="Interviews" className="flex flex-col gap-sm">

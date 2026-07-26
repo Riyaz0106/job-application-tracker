@@ -4,8 +4,14 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { ErrorNote } from '../ui/feedback';
 import { Field, Select, TextArea, TextInput } from '../ui/fields';
-import { STATUS_ORDER, STATUS_LABEL, type Status } from '../../lib/status';
+import {
+  deriveDefaultStatus,
+  STATUS_ORDER,
+  STATUS_LABEL,
+  type Status,
+} from '../../lib/status';
 import { toDateInputValue } from '../../lib/format';
+import { useToast } from '../ui/toastContext';
 
 type FormState = {
   company: string;
@@ -23,8 +29,10 @@ function initialState(app?: Application): FormState {
     company: app?.company ?? '',
     role: app?.role ?? '',
     jobDescription: app?.jobDescription ?? '',
-    status: app?.status ?? 'APPLIED',
-    appliedDate: toDateInputValue(app?.appliedDate ?? new Date()),
+    status: app?.status ?? 'DRAFTING',
+    // Blank on create so "have you actually applied?" is a real signal for the
+    // derived status (see deriveDefaultStatus) rather than always pre-answered.
+    appliedDate: app ? toDateInputValue(app.appliedDate) : '',
     salary: app?.salary ?? '',
     recruiter: app?.recruiter ?? '',
     notes: app?.notes ?? '',
@@ -43,11 +51,20 @@ export function ApplicationForm({
   application?: Application;
 }) {
   const utils = trpc.useUtils();
+  const toast = useToast();
   const [form, setForm] = useState<FormState>(() => initialState(application));
   const [errors, setErrors] = useState<
     Partial<Record<keyof FormState, string>>
   >({});
+  // Tracks whether the user has picked a status themselves. Once true, their
+  // choice wins for the rest of this dialog and is never re-derived.
+  const [statusPicked, setStatusPicked] = useState(false);
   const isEdit = Boolean(application);
+
+  // On create the status field follows field completeness live, so the default
+  // is visible as you type. On edit (or after an explicit pick) it's yours.
+  const effectiveStatus: Status =
+    isEdit || statusPicked ? form.status : deriveDefaultStatus(form);
 
   const onSuccess = () => {
     void utils.applications.list.invalidate();
@@ -55,8 +72,26 @@ export function ApplicationForm({
       void utils.applications.byId.invalidate({ id: application.id });
     onClose();
   };
-  const create = trpc.applications.create.useMutation({ onSuccess });
-  const update = trpc.applications.update.useMutation({ onSuccess });
+  const create = trpc.applications.create.useMutation({
+    onSuccess: (created) => {
+      toast.success(`Added ${created.company}`);
+      onSuccess();
+    },
+    onError: () =>
+      toast.error(
+        `Couldn’t add ${form.company.trim() || 'the application'} — check the fields and try again.`,
+      ),
+  });
+  const update = trpc.applications.update.useMutation({
+    onSuccess: (saved) => {
+      toast.success(`Saved ${saved.company}`);
+      onSuccess();
+    },
+    onError: () =>
+      toast.error(
+        `Couldn’t save ${form.company.trim() || 'the application'} — check the fields and try again.`,
+      ),
+  });
   const pending = create.isPending || update.isPending;
   const serverError = create.error?.message ?? update.error?.message;
 
@@ -65,6 +100,7 @@ export function ApplicationForm({
     if (open) {
       setForm(initialState(application));
       setErrors({});
+      setStatusPicked(false);
       create.reset();
       update.reset();
     }
@@ -92,7 +128,7 @@ export function ApplicationForm({
       company: form.company.trim(),
       role: form.role.trim(),
       jobDescription: form.jobDescription.trim(),
-      status: form.status,
+      status: effectiveStatus,
       salary: form.salary.trim(),
       recruiter: form.recruiter.trim(),
       notes: form.notes.trim(),
@@ -151,11 +187,22 @@ export function ApplicationForm({
         </Field>
 
         <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-          <Field label="Status" htmlFor="f-status">
+          <Field
+            label="Status"
+            htmlFor="f-status"
+            hint={
+              isEdit || statusPicked
+                ? undefined
+                : 'Set from the fields above. Pick one to override.'
+            }
+          >
             <Select
               id="f-status"
-              value={form.status}
-              onChange={(e) => set('status', e.target.value as Status)}
+              value={effectiveStatus}
+              onChange={(e) => {
+                setStatusPicked(true);
+                set('status', e.target.value as Status);
+              }}
             >
               {STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>

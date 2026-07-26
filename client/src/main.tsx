@@ -5,6 +5,7 @@ import { httpBatchLink } from '@trpc/client';
 import superjson from 'superjson';
 import App from './App';
 import { trpc } from './trpc';
+import { ToastProvider } from './components/ui/Toast';
 import { getToken } from './lib/token';
 import './index.css';
 
@@ -40,7 +41,9 @@ createRoot(rootElement).render(
   <StrictMode>
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <ToastProvider>
+          <App />
+        </ToastProvider>
       </QueryClientProvider>
     </trpc.Provider>
   </StrictMode>,

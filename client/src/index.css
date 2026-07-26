@@ -30,6 +30,9 @@
      radius     : --radius-card --radius-control --radius-pill
      space      : --space-2xs …-2xl
      motion     : --duration-fast|base|slow  --ease-out --ease-standard
+     elevation  : --shadow-lift
+     layering   : --z-overlay --z-toast
+     drag       : --opacity-dragging --scale-lift
    =========================================================================== */
 
 @import '@fontsource/ibm-plex-sans/400.css';
@@ -91,6 +94,17 @@
   --duration-slow: 360ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* elevation — used by the lifted drag card and toasts */
+  --shadow-lift: 0 18px 40px -12px rgb(0 0 0 / 0.75);
+
+  /* layering: toast sits above modals AND above dnd-kit's overlay (999) */
+  --z-overlay: 50;
+  --z-toast: 1000;
+
+  /* drag feedback: the placeholder left behind, and the lift on the dragged card */
+  --opacity-dragging: 0.4;
+  --scale-lift: 1.03;
 }
 
 @layer base {
@@ -116,6 +130,57 @@
     outline: 2px solid rgb(var(--color-signal));
     outline-offset: 2px;
     border-radius: 2px;
+  }
+}
+
+/* Toast enter/leave. Plain CSS (transform + opacity only) so Framer Motion stays
+   scoped to the card-travel FLIP and modal transitions. Both animations are
+   neutralised by the reduced-motion rule below, degrading to instant. */
+@layer components {
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, -0.5rem, 0) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes toast-out {
+    from {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translate3d(0, -0.25rem, 0) scale(0.98);
+    }
+  }
+
+  /* Drag lift: the overlay card scales up as it's picked up. This is the visible
+     confirmation that a touch long-press registered — without it, mobile users
+     release early thinking the hold did nothing. */
+  @keyframes card-lift {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(var(--scale-lift));
+    }
+  }
+
+  .card-lift {
+    animation: card-lift var(--duration-fast) var(--ease-out) both;
+  }
+
+  .toast-enter {
+    animation: toast-in var(--duration-base) var(--ease-out) both;
+  }
+
+  .toast-leave {
+    animation: toast-out var(--duration-base) var(--ease-standard) both;
   }
 }
 

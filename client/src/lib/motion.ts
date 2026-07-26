@@ -31,6 +31,12 @@ export function tween(speed: 'fast' | 'base' | 'slow' = 'base') {
   return { duration: durations()[speed], ease: EASE_OUT };
 }
 
+// Same tokens in milliseconds, for JS timers that must outlast a CSS animation
+// (e.g. removing a toast after its leave animation finishes).
+export function durationMs(speed: 'fast' | 'base' | 'slow' = 'base'): number {
+  return durations()[speed] * 1000;
+}
+
 // A gentle spring so a card reads as *travelling* to its new column, not snapping.
 export const CARD_TRAVEL = {
   type: 'spring',

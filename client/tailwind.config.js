@@ -47,6 +47,19 @@ export default {
         xl: 'var(--space-xl)',
         '2xl': 'var(--space-2xl)',
       },
+      boxShadow: {
+        lift: 'var(--shadow-lift)',
+      },
+      zIndex: {
+        overlay: 'var(--z-overlay)',
+        toast: 'var(--z-toast)',
+      },
+      opacity: {
+        dragging: 'var(--opacity-dragging)',
+      },
+      scale: {
+        lift: 'var(--scale-lift)',
+      },
       transitionDuration: {
         fast: 'var(--duration-fast)',
         base: 'var(--duration-base)',

@@ -1,4 +1,5 @@
 import { AnimatePresence } from 'framer-motion';
+import { useDroppable } from '@dnd-kit/core';
 import { ApplicationCard } from './ApplicationCard';
 import { statusColor, STATUS_LABEL, type Status } from '../../lib/status';
 import type { Application } from '../../trpc';
@@ -20,16 +21,32 @@ export function Column({
   apps,
   onOpen,
   onChangeStatus,
+  dragActive,
+  travelSuppressedId,
 }: {
   status: Status;
   apps: Application[];
   onOpen: (id: string) => void;
   onChangeStatus: (id: string, status: Status) => void;
+  dragActive: boolean;
+  travelSuppressedId: string | null;
 }) {
+  // The whole column is the drop target — dropping anywhere in it sets that status.
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+
+  // Drop affordance: while a drag is in flight every column reads as a target
+  // (brighter border), and the one under the pointer is picked out in Signal.
+  const dropState = isOver
+    ? 'border-signal bg-signal/5'
+    : dragActive
+      ? 'border-line/80 border-dashed'
+      : 'border-line';
+
   return (
     <section
+      ref={setNodeRef}
       aria-label={`${STATUS_LABEL[status]}, ${apps.length} ${apps.length === 1 ? 'application' : 'applications'}`}
-      className="flex min-h-0 w-72 shrink-0 flex-col rounded-card border border-line bg-surface"
+      className={`flex min-h-0 w-72 shrink-0 flex-col rounded-card border bg-surface transition-colors duration-fast ${dropState}`}
     >
       <header className="flex items-center gap-xs border-b border-line px-md py-sm">
         <span
@@ -47,9 +64,13 @@ export function Column({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-sm">
         {apps.length === 0 ? (
-          <div className="flex min-h-24 flex-col items-center justify-center rounded-control border border-dashed border-line/70 p-md text-center">
+          <div
+            className={`flex min-h-24 flex-col items-center justify-center rounded-control border border-dashed p-md text-center transition-colors duration-fast ${
+              isOver ? 'border-signal/60' : 'border-line/70'
+            }`}
+          >
             <p className="text-xs leading-relaxed text-muted">
-              {EMPTY_COPY[status]}
+              {isOver ? `Drop to move here` : EMPTY_COPY[status]}
             </p>
           </div>
         ) : (
@@ -61,6 +82,7 @@ export function Column({
                   app={app}
                   onOpen={onOpen}
                   onChangeStatus={onChangeStatus}
+                  suppressTravel={travelSuppressedId === app.id}
                 />
               ))}
             </AnimatePresence>
