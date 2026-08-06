@@ -3,13 +3,12 @@
 A full-stack TypeScript application for tracking job applications. This
 repository is a **monorepo** managed with npm workspaces.
 
-> **Status: Phase 5 — the real UI.**
-> The placeholder screens are replaced by **PIPELINE**: a dark ops-console with a
-> Kanban **status board**, a signature pipeline-funnel readout, create/edit forms,
-> a detail slide-over with interview management, and polished auth — all on a
-> token-driven design system (Tailwind reading CSS custom properties). Dates now
-> round-trip as real `Date`s (superjson). AI and file uploads under _Planned_ are
-> **not built yet**.
+> **Status: Phase 6 — file uploads.**
+> On top of the PIPELINE board (Phases 1–5.5), each application can now carry a
+> **CV and cover letter** stored in **Cloudinary**, with drag-and-drop upload,
+> progress, remove-with-confirmation, and a quiet 📎 on the board card. A `.txt`
+> job description can be imported straight into the form. The AI features under
+> _Planned_ are **not built yet**.
 
 ## Stack
 
@@ -21,8 +20,9 @@ repository is a **monorepo** managed with npm workspaces.
 | API       | tRPC v11 + Zod + superjson, TanStack Query on the client |
 | Auth      | JWT (`jsonwebtoken`) + `bcryptjs` password hashing       |
 | Database  | PostgreSQL via Prisma 6 (`@prisma/client`)               |
+| Files     | Cloudinary (`raw`) + `multer`, server-side only          |
 | Tooling   | npm workspaces, ESLint 9 (flat config), Prettier, `tsx`  |
-| _Planned_ | Anthropic API, file uploads                              |
+| _Planned_ | Anthropic API, Excel export                              |
 | _Planned_ | Docker, GitHub Actions, Railway                          |
 
 ## Repository layout
@@ -54,16 +54,20 @@ repository is a **monorepo** managed with npm workspaces.
 │       ├── auth/
 │       │   ├── password.ts # bcryptjs hash / verify
 │       │   └── jwt.ts       # sign / verify JWT (7-day expiry)
+│       ├── uploads/
+│       │   ├── fileRules.ts  # type/size rules — shared with the client
+│       │   └── cloudinary.ts # ONLY place credentials are used (upload/destroy)
 │       ├── trpc/
 │       │   ├── trpc.ts     # initTRPC: router, publicProcedure, protectedProcedure
 │       │   ├── context.ts  # per-request context: ctx.prisma + ctx.user (from JWT)
 │       │   └── routers/
 │       │       ├── _app.ts        # root appRouter + exported AppRouter type
 │       │       ├── auth.ts         # register / login / me
-│       │       ├── applications.ts # CRUD, scoped to ctx.user.id
+│       │       ├── applications.ts # CRUD + attachFile/removeFile, scoped to ctx.user.id
 │       │       └── interviews.ts   # CRUD, scoped through the parent application
 │       └── routes/
 │           ├── health.ts  # GET /health
+│           ├── uploads.ts # POST /api/uploads/:applicationId/:kind (multipart)
 │           └── dbCheck.ts # GET /db-check  (TEMPORARY, Phase 2)
 ├── tsconfig.base.json   # strict TS options shared by both workspaces
 ├── eslint.config.mjs    # one flat ESLint config for the whole repo
@@ -291,6 +295,99 @@ inline error messages.
 5. Narrow the window to phone width — columns scroll horizontally; tab through with the
    keyboard to see focus rings. Enable OS "reduce motion" — transitions become instant.
 
+## File uploads (Phase 6)
+
+Attach a **CV** and a **cover letter** to any application. The files live in
+**Cloudinary**; PostgreSQL stores only metadata (filename, URL, size, upload date,
+and Cloudinary's `public_id`).
+
+### Setup
+
+Add your Cloudinary credentials to **`server/.env`** (copy the keys from
+`server/.env.example`; the file is git-ignored):
+
+```
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=000000000000000
+CLOUDINARY_API_SECRET=your-api-secret
+```
+
+Find all three on your Cloudinary dashboard under **Account Details / API Keys**.
+Until they're set, uploads fail with a clear message naming the missing variables.
+
+> **The API secret never reaches the browser.** It's read only by
+> `server/src/uploads/cloudinary.ts`, from `server/.env` — a file Vite never loads,
+> with no `VITE_` prefix (Vite only exposes `VITE_*` variables). The browser posts
+> files to **our** API, and this server does the Cloudinary call. The alternative —
+> unsigned browser-to-Cloudinary uploads — would have to publish the cloud name and
+> an upload preset, letting anyone upload to the account.
+
+### Accepted files
+
+| Rule       | Value                                                      |
+| ---------- | ---------------------------------------------------------- |
+| Types      | **PDF, DOCX, XLSX, TXT**                                   |
+| Max size   | **5MB**                                                    |
+| Validation | file **extension** _and_ declared **MIME type** must agree |
+
+Extension alone is trivially renamed, and the MIME type is client-supplied too, so
+neither is trusted on its own — requiring them to match raises the bar. (Files are
+stored as Cloudinary `raw` resources and never executed; the real containment is
+that plus the size cap and the ownership check.) `application/octet-stream` is
+tolerated for `.docx`/`.xlsx` only, because Windows and several browsers genuinely
+report that for Office documents. The rules live in one place —
+`server/src/uploads/fileRules.ts` — imported by both the server and the client, so
+the message you see before uploading is the one the server would give you.
+
+### Why uploads aren't a tRPC procedure
+
+tRPC serialises its inputs as JSON. Binary could only ride that as base64: ~33%
+bigger, the whole file held twice in memory, and no upload-progress events. So the
+work is split:
+
+```
+browser ──multipart POST──►  /api/uploads/:applicationId/:kind   (Express + multer)
+                             auth → ownership → size/type → Cloudinary
+                                        │
+                                        └─► returns { fileName, url, publicId, fileSize }
+                                                        │
+browser ──tRPC mutation──►  applications.attachFile  ───┘   (writes the database)
+```
+
+**The boundary:** the Express route moves _bytes_ and returns metadata; **tRPC owns
+every database write**, so the app keeps one type-safe data layer. Auth and the
+ownership check run _before_ multer, so an anonymous or non-owner request never
+streams a byte into the process.
+
+Removal (`applications.removeFile`) deletes from Cloudinary **first**, then clears
+the columns — if storage deletion fails the row is left pointing at the file rather
+than orphaning it. Replacing an attachment destroys the file it supersedes, and
+deleting an application removes its files too.
+
+### TXT job-description import (not an attachment)
+
+The application form has an **Import .txt** button next to the job description. It
+reads the file **in the browser** and drops the text into the textarea, where you can
+edit it before saving. Nothing is uploaded: the text belongs in the `jobDescription`
+column, which is what Phase 7's AI scoring will read.
+
+### Verify Phase 6
+
+1. Set the three `CLOUDINARY_*` variables in `server/.env`, then `npm run dev`.
+2. Open an application → **Attachments** → drop a PDF on the **CV** zone (or _browse
+   files_). Watch the progress bar; a toast confirms it, and the card on the board
+   gains a 📎.
+3. **Rejected oversize:** try a file over 5MB → _"File is 8MB — the limit is 5MB."_,
+   no upload attempted.
+4. **Rejected type:** try a `.png` → _"“.png” files aren't supported — PDF, DOCX, XLSX
+   and TXT only."_
+5. Click the filename or **View** — the file opens from Cloudinary.
+6. **Remove** → confirm → toast. Check your Cloudinary **Media Library** (Folders →
+   `job-tracker/<userId>/<applicationId>`): the file is gone, and the card's 📎
+   disappears.
+7. In **+ New**, click **Import .txt** and pick a `.txt` — the job description fills in
+   and stays editable.
+
 ## Other scripts (run from the root)
 
 | Command                | What it does                                       |
@@ -312,5 +409,5 @@ curl http://localhost:4000/api/trpc/applications.list   # {"result":{"data":[...
 
 ## Planned (future phases — not yet implemented)
 
-JWT multi-user auth · Anthropic AI features · file uploads · Docker + Docker
-Compose · GitHub Actions CI · Railway deployment.
+Anthropic AI features (match scoring, cover-letter generation) · Excel export ·
+Docker + Docker Compose · GitHub Actions CI · Railway deployment.

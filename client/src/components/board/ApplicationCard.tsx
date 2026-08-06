@@ -31,10 +31,27 @@ function CardFace({ app }: { app: Application }) {
         </div>
         {app.matchScore != null && <MatchRing score={app.matchScore} />}
       </div>
-      <p className="mt-xs font-mono text-xs text-muted">
+      <p className="mt-xs flex items-center gap-2xs font-mono text-xs text-muted">
         {formatDateShort(app.appliedDate)}
+        <AttachmentMark app={app} />
       </p>
     </>
+  );
+}
+
+// Quiet metadata: a paperclip only when something is actually attached. Muted,
+// same size as the date it sits beside — this is a footnote, not a headline.
+function AttachmentMark({ app }: { app: Application }) {
+  const count = (app.cvFileUrl ? 1 : 0) + (app.coverLetterUrl ? 1 : 0);
+  if (count === 0) return null;
+  const what = [app.cvFileUrl && 'CV', app.coverLetterUrl && 'cover letter']
+    .filter(Boolean)
+    .join(' and ');
+  return (
+    <span title={`Attached: ${what}`} className="text-muted">
+      <span aria-hidden>📎</span>
+      <span className="sr-only">{`${count} attachment${count > 1 ? 's' : ''}: ${what}`}</span>
+    </span>
   );
 }
 

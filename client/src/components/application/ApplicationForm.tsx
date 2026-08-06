@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  extensionOf,
+  formatBytes,
+  MAX_FILE_BYTES,
+  MAX_SIZE_LABEL,
+} from '../../../../server/src/uploads/fileRules';
 import { trpc, type Application } from '../../trpc';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -37,6 +43,65 @@ function initialState(app?: Application): FormState {
     recruiter: app?.recruiter ?? '',
     notes: app?.notes ?? '',
   };
+}
+
+// Reads a .txt file in the BROWSER and drops its text into the job description
+// field. Deliberately not an upload: the text belongs in the database column
+// (that's what Phase 7's scoring will read), so nothing goes to Cloudinary and
+// the user can edit it before saving.
+function JobDescriptionImport({
+  onImport,
+}: {
+  onImport: (text: string) => void;
+}) {
+  const toast = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    if (extensionOf(file.name) !== '.txt') {
+      toast.error(
+        `“${file.name}” isn’t a .txt file — import plain text, or paste the description instead.`,
+      );
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error(
+        `File is ${formatBytes(file.size)} — the limit is ${MAX_SIZE_LABEL}.`,
+      );
+      return;
+    }
+    try {
+      const text = await file.text();
+      onImport(text);
+      toast.success(`Imported ${file.name}`);
+    } catch {
+      toast.error(`Couldn’t read ${file.name} — try pasting the text instead.`);
+    }
+  }
+
+  return (
+    <div className="mt-2xs">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="min-h-11 rounded-control text-xs text-signal transition-colors duration-fast hover:brightness-110"
+      >
+        Import .txt
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".txt,text/plain"
+        className="sr-only"
+        aria-label="Import a .txt job description"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleFile(file);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
 }
 
 // Create/edit form. `application` undefined = create. Inline per-field validation
@@ -175,15 +240,23 @@ export function ApplicationForm({
           label="Job description"
           htmlFor="f-jd"
           error={errors.jobDescription}
+          hint="Paste it, or import a .txt file — you can edit it before saving."
         >
-          <TextArea
-            id="f-jd"
-            rows={5}
-            value={form.jobDescription}
-            onChange={(e) => set('jobDescription', e.target.value)}
-            aria-invalid={Boolean(errors.jobDescription)}
-            aria-describedby={errors.jobDescription ? 'f-jd-error' : undefined}
-          />
+          <>
+            <TextArea
+              id="f-jd"
+              rows={5}
+              value={form.jobDescription}
+              onChange={(e) => set('jobDescription', e.target.value)}
+              aria-invalid={Boolean(errors.jobDescription)}
+              aria-describedby={
+                errors.jobDescription ? 'f-jd-error' : undefined
+              }
+            />
+            <JobDescriptionImport
+              onImport={(text) => set('jobDescription', text)}
+            />
+          </>
         </Field>
 
         <div className="grid grid-cols-1 gap-md sm:grid-cols-2">

@@ -4,6 +4,7 @@ import { ConfirmDialog, Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { ErrorNote, MatchRing, Skeleton, StatusBadge } from '../ui/feedback';
 import { InterviewSection } from './InterviewSection';
+import { AttachmentSection } from './AttachmentSection';
 import { formatDate } from '../../lib/format';
 import { useToast } from '../ui/toastContext';
 
@@ -82,6 +83,8 @@ export function ApplicationDetail({
 
           <Block label="Job description">{app.jobDescription}</Block>
           {app.notes && <Block label="Notes">{app.notes}</Block>}
+
+          <AttachmentSection app={app} />
 
           <InterviewSection applicationId={app.id} />
 
