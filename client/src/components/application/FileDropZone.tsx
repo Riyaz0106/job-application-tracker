@@ -19,18 +19,29 @@ export function FileDropZone({
   disabled = false,
   busy = false,
   progress,
+  // Overridable so the same zone can serve the .txt job-description import,
+  // which accepts one type rather than the attachment set.
+  accept = ACCEPT_ATTRIBUTE,
+  hint = `PDF, DOCX, XLSX, TXT · max ${MAX_SIZE_LABEL}`,
+  prompt,
 }: {
   label: string;
   onFile: (file: File) => void;
   disabled?: boolean;
   busy?: boolean;
   progress?: number;
+  accept?: string;
+  hint?: string;
+  prompt?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
+    // Stop the drop bubbling to any enclosing drop target (the job-description
+    // field wraps its textarea and this zone in one), so a file is imported once.
+    e.stopPropagation();
     setDragOver(false);
     if (disabled) return;
     const file = e.dataTransfer.files?.[0];
@@ -79,7 +90,7 @@ export function FileDropZone({
       ) : (
         <>
           <p className="text-sm text-muted">
-            Drop your {label.toLowerCase()} here, or
+            {prompt ?? `Drop your ${label.toLowerCase()} here, or`}
           </p>
           <button
             type="button"
@@ -89,16 +100,14 @@ export function FileDropZone({
           >
             browse files
           </button>
-          <p className="font-mono text-xs text-muted">
-            PDF, DOCX, XLSX, TXT · max {MAX_SIZE_LABEL}
-          </p>
+          <p className="font-mono text-xs text-muted">{hint}</p>
         </>
       )}
 
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPT_ATTRIBUTE}
+        accept={accept}
         className="sr-only"
         aria-label={`Choose a ${label} file`}
         onChange={(e) => {

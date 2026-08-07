@@ -231,6 +231,9 @@ export function Board({
         open={formMode !== null}
         application={formMode?.type === 'edit' ? formMode.app : undefined}
         onClose={() => setFormMode(null)}
+        // If a staged attachment failed to upload, drop the user straight into
+        // the detail view, where the same file can be attached again.
+        onOpenDetail={setDetailId}
       />
       <ApplicationDetail
         id={detailId}

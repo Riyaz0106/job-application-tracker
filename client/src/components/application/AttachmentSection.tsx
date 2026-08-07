@@ -92,6 +92,32 @@ function AttachmentSlot({
   });
 
   const uploading = progress !== null || attach.isPending;
+  const [opening, setOpening] = useState(false);
+
+  // Stored files aren't publicly readable, so opening one asks the server for a
+  // short-lived signed URL first. The blank tab is opened SYNCHRONOUSLY inside
+  // the click handler — open it after the await and popup blockers kill it.
+  async function openFile() {
+    setOpening(true);
+    const tab = window.open('', '_blank', 'noopener');
+    try {
+      const { url } = await utils.client.applications.fileUrl.query({
+        applicationId,
+        kind: slot.kind,
+      });
+      if (tab) tab.location.href = url;
+      else window.location.href = url; // popup blocked — navigate instead
+    } catch (error) {
+      tab?.close();
+      toast.error(
+        `Couldn’t open ${slot.fileName ?? 'the file'} — ${
+          error instanceof Error ? error.message : 'try again.'
+        }`,
+      );
+    } finally {
+      setOpening(false);
+    }
+  }
 
   async function handleFile(file: File) {
     // Check locally first so the exact size/type problem is reported instantly,
@@ -146,27 +172,27 @@ function AttachmentSlot({
       {slot.url && !uploading ? (
         <div className="flex flex-wrap items-center justify-between gap-xs">
           <div className="min-w-0">
-            <a
-              href={slot.url}
-              target="_blank"
-              rel="noreferrer"
-              className="block truncate text-sm text-signal underline underline-offset-4 transition-colors duration-fast hover:brightness-110"
+            <button
+              type="button"
+              onClick={() => void openFile()}
+              disabled={opening}
+              className="block max-w-full truncate text-left text-sm text-signal underline underline-offset-4 transition-colors duration-fast hover:brightness-110 disabled:opacity-50"
             >
               {slot.fileName ?? 'View file'}
-            </a>
+            </button>
             <p className="font-mono text-xs text-muted">
               {slot.fileSize != null ? formatBytes(slot.fileSize) : '—'}
               {slot.uploadedAt ? ` · ${formatDate(slot.uploadedAt)}` : ''}
             </p>
           </div>
-          <a
-            href={slot.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex min-h-11 items-center rounded-control border border-line px-sm text-xs text-content transition-colors duration-fast hover:border-signal/50"
+          <button
+            type="button"
+            onClick={() => void openFile()}
+            disabled={opening}
+            className="flex min-h-11 items-center rounded-control border border-line px-sm text-xs text-content transition-colors duration-fast hover:border-signal/50 disabled:opacity-50"
           >
-            View
-          </a>
+            {opening ? 'Opening…' : 'View'}
+          </button>
         </div>
       ) : (
         <FileDropZone

@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc';
-import { destroyAttachment } from '../../uploads/cloudinary';
+import { destroyAttachment, signedDownloadUrl } from '../../uploads/cloudinary';
 import { ATTACHMENT_KINDS, type AttachmentKind } from '../../uploads/fileRules';
 
 // Maps an attachment kind onto the columns that hold its metadata. Keeps the
@@ -115,6 +115,40 @@ export const applicationsRouter = router({
         where: { id: input.id },
         data: input.data,
       });
+    }),
+
+  // Mints a short-lived download link for an attachment. Stored files are not
+  // publicly readable (they're CVs), so viewing one goes through here: ownership
+  // is checked first, then the URL is signed server-side and expires in minutes.
+  fileUrl: protectedProcedure
+    .input(z.object({ applicationId: z.string(), kind: attachmentKindEnum }))
+    .query(async ({ ctx, input }) => {
+      const cols = ATTACHMENT_COLUMNS[input.kind];
+      const row = await ctx.prisma.application.findFirst({
+        where: { id: input.applicationId, userId: ctx.user.id },
+        select: { id: true, [cols.publicId]: true, [cols.fileName]: true },
+      });
+      if (!row) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Application not found',
+        });
+      }
+      const record = row as Record<string, unknown>;
+      const publicId = record[cols.publicId];
+      if (typeof publicId !== 'string') {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'No file is attached.',
+        });
+      }
+      return {
+        url: signedDownloadUrl(publicId),
+        fileName:
+          typeof record[cols.fileName] === 'string'
+            ? (record[cols.fileName] as string)
+            : 'file',
+      };
     }),
 
   // Records a file that /api/uploads has already stored in Cloudinary. The route

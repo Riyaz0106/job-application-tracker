@@ -90,3 +90,23 @@ export async function destroyAttachment(publicId: string): Promise<void> {
   configure();
   await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
 }
+
+// How long a download link stays usable. Long enough to click and for the file
+// to finish downloading; short enough that a copied URL isn't a lasting leak.
+const DOWNLOAD_TTL_SECONDS = 300;
+
+// Mints a short-lived, signed download URL for a stored file.
+//
+// These files are CVs — personal data — so they are NOT publicly readable: a
+// plain delivery URL returns 401 for `raw` resources, and that's the behaviour
+// we want to keep. Instead the server signs a URL on demand, only after it has
+// checked that the caller owns the application (see applications.fileUrl). The
+// signature is computed here with the API secret, which never leaves this process.
+export function signedDownloadUrl(publicId: string): string {
+  configure();
+  return cloudinary.utils.private_download_url(publicId, '', {
+    resource_type: 'raw',
+    type: 'upload',
+    expires_at: Math.floor(Date.now() / 1000) + DOWNLOAD_TTL_SECONDS,
+  });
+}

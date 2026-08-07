@@ -364,12 +364,34 @@ the columns — if storage deletion fails the row is left pointing at the file r
 than orphaning it. Replacing an attachment destroys the file it supersedes, and
 deleting an application removes its files too.
 
+### Stored files are private
+
+Attachments are CVs — personal data — so they are **not** publicly readable: fetching
+a stored Cloudinary URL directly returns `401`. Viewing one goes through
+`applications.fileUrl`, which checks that you own the application and then signs a
+**download link that expires after five minutes**. The signature is computed on the
+server with the API secret, so nothing long-lived is ever handed to the browser.
+
+> If you'd rather serve files from plain public URLs, allow `raw` delivery under
+> Cloudinary → Settings → Security. Be deliberate about it: it makes every uploaded
+> CV readable by anyone who has (or guesses) the URL.
+
 ### TXT job-description import (not an attachment)
 
-The application form has an **Import .txt** button next to the job description. It
-reads the file **in the browser** and drops the text into the textarea, where you can
-edit it before saving. Nothing is uploaded: the text belongs in the `jobDescription`
-column, which is what Phase 7's AI scoring will read.
+The job-description field has its own drop zone (same visual language as the
+attachment zones): **drop a `.txt` file anywhere on the field, or browse for one**.
+It's read **in the browser** and its text fills the textarea, where you can edit it
+before saving. Nothing is uploaded: the text belongs in the `jobDescription` column,
+which is what Phase 7's AI scoring will read.
+
+### Attachments while creating (Phase 6.5)
+
+The create form stages a CV and cover letter _before_ the application exists: files
+are held in memory (validated for type and size the moment you pick them), then
+uploaded once the application has an id. If the application is created but an upload
+fails, **the application is kept** — your typed details are worth more than the
+attachment — and a single toast names what failed while the detail slide-over opens
+so you can retry there.
 
 ### Verify Phase 6
 
@@ -381,7 +403,8 @@ column, which is what Phase 7's AI scoring will read.
    no upload attempted.
 4. **Rejected type:** try a `.png` → _"“.png” files aren't supported — PDF, DOCX, XLSX
    and TXT only."_
-5. Click the filename or **View** — the file opens from Cloudinary.
+5. Click the filename or **View** — a signed, five-minute link opens the file in a
+   new tab. (Pasting the raw Cloudinary URL from the database gives `401`, by design.)
 6. **Remove** → confirm → toast. Check your Cloudinary **Media Library** (Folders →
    `job-tracker/<userId>/<applicationId>`): the file is gone, and the card's 📎
    disappears.
