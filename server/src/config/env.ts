@@ -18,4 +18,13 @@ export const env = {
   // Secret used to sign/verify JWTs. May be undefined here; the auth layer
   // (src/auth/jwt.ts) validates its presence before signing/verifying.
   jwtSecret: process.env.JWT_SECRET,
+  // Cloudinary credentials. These are read ONLY here, in the server workspace,
+  // from server/.env — which is git-ignored and which Vite never reads. The API
+  // secret must never be sent to a browser, so every Cloudinary call happens in
+  // src/uploads/cloudinary.ts on this process. See README "File uploads".
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    apiSecret: process.env.CLOUDINARY_API_SECRET,
+  },
 } as const;

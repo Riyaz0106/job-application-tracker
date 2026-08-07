@@ -1,6 +1,31 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc';
+import { destroyAttachment, signedDownloadUrl } from '../../uploads/cloudinary';
+import { ATTACHMENT_KINDS, type AttachmentKind } from '../../uploads/fileRules';
+
+// Maps an attachment kind onto the columns that hold its metadata. Keeps the
+// two procedures below free of repeated field-name string soup.
+const ATTACHMENT_COLUMNS = {
+  cv: {
+    fileName: 'cvFileName',
+    url: 'cvFileUrl',
+    publicId: 'cvPublicId',
+    fileSize: 'cvFileSize',
+    uploadedAt: 'cvUploadedAt',
+  },
+  coverLetter: {
+    fileName: 'coverLetterFileName',
+    url: 'coverLetterUrl',
+    publicId: 'coverLetterPublicId',
+    fileSize: 'coverLetterFileSize',
+    uploadedAt: 'coverLetterUploadedAt',
+  },
+} as const satisfies Record<AttachmentKind, Record<string, string>>;
+
+const attachmentKindEnum = z.enum(
+  ATTACHMENT_KINDS as unknown as [AttachmentKind, ...AttachmentKind[]],
+);
 
 // Mirrors the Prisma `Status` enum. Kept explicit so invalid statuses are
 // rejected at the network boundary before they reach the database.
@@ -92,12 +117,135 @@ export const applicationsRouter = router({
       });
     }),
 
+  // Mints a short-lived download link for an attachment. Stored files are not
+  // publicly readable (they're CVs), so viewing one goes through here: ownership
+  // is checked first, then the URL is signed server-side and expires in minutes.
+  fileUrl: protectedProcedure
+    .input(z.object({ applicationId: z.string(), kind: attachmentKindEnum }))
+    .query(async ({ ctx, input }) => {
+      const cols = ATTACHMENT_COLUMNS[input.kind];
+      const row = await ctx.prisma.application.findFirst({
+        where: { id: input.applicationId, userId: ctx.user.id },
+        select: { id: true, [cols.publicId]: true, [cols.fileName]: true },
+      });
+      if (!row) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Application not found',
+        });
+      }
+      const record = row as Record<string, unknown>;
+      const publicId = record[cols.publicId];
+      if (typeof publicId !== 'string') {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'No file is attached.',
+        });
+      }
+      return {
+        url: signedDownloadUrl(publicId),
+        fileName:
+          typeof record[cols.fileName] === 'string'
+            ? (record[cols.fileName] as string)
+            : 'file',
+      };
+    }),
+
+  // Records a file that /api/uploads has already stored in Cloudinary. The route
+  // moves the bytes; this owns the database write (and the type safety).
+  attachFile: protectedProcedure
+    .input(
+      z.object({
+        applicationId: z.string(),
+        kind: attachmentKindEnum,
+        fileName: z.string().min(1),
+        url: z.string().url(),
+        publicId: z.string().min(1),
+        fileSize: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const cols = ATTACHMENT_COLUMNS[input.kind];
+      const existing = await ctx.prisma.application.findFirst({
+        where: { id: input.applicationId, userId: ctx.user.id },
+        select: { id: true, [cols.publicId]: true },
+      });
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Application not found',
+        });
+      }
+
+      // Replacing an attachment: remove the file this one supersedes, otherwise
+      // it lingers in storage with nothing pointing at it.
+      const previousPublicId = (existing as Record<string, unknown>)[
+        cols.publicId
+      ];
+      if (
+        typeof previousPublicId === 'string' &&
+        previousPublicId !== input.publicId
+      ) {
+        await destroyAttachment(previousPublicId).catch(() => {
+          // A failed cleanup must not fail the attach — the new file is already
+          // stored and the user's intent is to attach it.
+        });
+      }
+
+      return ctx.prisma.application.update({
+        where: { id: input.applicationId },
+        data: {
+          [cols.fileName]: input.fileName,
+          [cols.url]: input.url,
+          [cols.publicId]: input.publicId,
+          [cols.fileSize]: input.fileSize,
+          [cols.uploadedAt]: new Date(),
+        },
+      });
+    }),
+
+  // Deletes from Cloudinary AND clears the columns, so storage and the database
+  // stay in step.
+  removeFile: protectedProcedure
+    .input(z.object({ applicationId: z.string(), kind: attachmentKindEnum }))
+    .mutation(async ({ ctx, input }) => {
+      const cols = ATTACHMENT_COLUMNS[input.kind];
+      const existing = await ctx.prisma.application.findFirst({
+        where: { id: input.applicationId, userId: ctx.user.id },
+        select: { id: true, [cols.publicId]: true },
+      });
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Application not found',
+        });
+      }
+
+      const publicId = (existing as Record<string, unknown>)[cols.publicId];
+      if (typeof publicId === 'string') {
+        // Deliberately NOT caught: if the file can't be removed from storage we
+        // keep the database pointing at it rather than orphaning it silently.
+        await destroyAttachment(publicId);
+      }
+
+      return ctx.prisma.application.update({
+        where: { id: input.applicationId },
+        data: {
+          [cols.fileName]: null,
+          [cols.url]: null,
+          [cols.publicId]: null,
+          [cols.fileSize]: null,
+          [cols.uploadedAt]: null,
+        },
+      });
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const owned = await ctx.prisma.application.findFirst({
         where: { id: input.id, userId: ctx.user.id },
-        select: { id: true },
+        select: { id: true, cvPublicId: true, coverLetterPublicId: true },
       });
       if (!owned) {
         throw new TRPCError({
@@ -105,6 +253,15 @@ export const applicationsRouter = router({
           message: 'Application not found',
         });
       }
+      // Deleting the application must also clear its stored files, or they'd sit
+      // in Cloudinary forever with no row pointing at them. Cleanup failures are
+      // swallowed: the user asked to delete the application, and a stuck remote
+      // file shouldn't block that.
+      await Promise.all(
+        [owned.cvPublicId, owned.coverLetterPublicId]
+          .filter((id): id is string => typeof id === 'string')
+          .map((id) => destroyAttachment(id).catch(() => undefined)),
+      );
       // Interview.applicationId is a Restrict FK, so delete child interviews
       // first, then the application — atomically in one transaction.
       const [, application] = await ctx.prisma.$transaction([
