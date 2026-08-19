@@ -33,10 +33,23 @@ model Application {
   jobDescription String      @db.Text
   matchScore     Int?
   matchGaps      String?     @db.Text
-  cvFileName     String?
-  cvFileUrl      String?
-  coverLetter    String?
-  coverLetterUrl String?
+
+  // --- CV attachment (file lives in Cloudinary; only metadata is stored here) ---
+  cvFileName   String?
+  cvFileUrl    String?
+  cvPublicId   String? // Cloudinary's destroy() takes a public_id, not a URL
+  cvFileSize   Int? // bytes, for "filename and size" in the UI
+  cvUploadedAt DateTime?
+
+  // --- Cover-letter attachment ---
+  // `coverLetter` stays the prose field (Phase 7 writes generated letter text
+  // there), so the attachment needs its own filename column.
+  coverLetter           String?
+  coverLetterUrl        String?
+  coverLetterFileName   String?
+  coverLetterPublicId   String?
+  coverLetterFileSize   Int?
+  coverLetterUploadedAt DateTime?
   status         Status      @default(APPLIED)
   appliedDate    DateTime    @default(now())
   interviews     Interview[]
